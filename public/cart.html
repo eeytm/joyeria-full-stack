@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Carrito - Joyería Brillante</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Bootstrap + Estilos -->
+  <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+  <link href="css/style.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+  <div class="container py-5">
+    <nav class="mb-4">
+      <a href="index.html" class="btn btn-outline-secondary">&larr; Volver al inicio</a>
+    </nav>
+
+    <div class="row">
+      <div class="col-lg-8">
+        <h3 class="mb-4">Carrito de Compras</h3>
+        <table class="table table-bordered text-center bg-white">
+          <thead class="thead-dark">
+            <tr>
+              <th>Producto</th>
+              <th>Precio</th>
+              <th>Cantidad</th>
+              <th>Total</th>
+              <th>Eliminar</th>
+            </tr>
+          </thead>
+          <tbody id="cart-items"></tbody>
+        </table>
+      </div>
+
+      <div class="col-lg-4">
+        <h4 class="mb-3">Resumen</h4>
+
+        <!-- Cupón -->
+        <div class="mb-3">
+          <input id="couponInput" type="text" class="form-control" placeholder="Código de cupón">
+          <button id="applyCouponBtn" class="btn btn-yellow w-100 mt-2">Aplicar Cupón</button>
+          <small id="couponHint" class="form-text text-muted mt-1" style="display:none;"></small>
+        </div>
+
+        <!-- Resumen -->
+        <div class="summary-box">
+          <p>Subtotal: Q<span id="subtotal">0.00</span></p>
+          <p>Envío: Q<span id="shipping">10.00</span></p>
+          <p id="discountRow" style="display:none;">Descuento: -Q<span id="discount">0.00</span></p>
+          <hr>
+          <h5>Total: Q<span id="total">0.00</span></h5>
+          <a id="goCheckout" href="checkout.html" class="btn btn-yellow btn-block mt-3">Proceder al Pago</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { validateCoupon } from './js/api.js';
+
+    // --- Claves de storage ---
+    const CART_KEY     = 'cart';
+    const SUMMARY_KEY  = 'checkout_summary';
+    const COUPON_KEY   = 'coupon';
+
+    // --- Envío fijo ---
+    const SHIPPING = 10;
+
+    // --- Util ---
+    const money = n => Number(n || 0).toFixed(2);
+
+    // --- Estado ---
+    let cart      = safeRead(CART_KEY, []);
+    let discount  = 0;              // Q
+    let savedCoupon = safeRead(COUPON_KEY, null); // {codigo, tipo, valor}
+
+    // --- DOM ---
+    const $items       = document.getElementById('cart-items');
+    const $subtotal    = document.getElementById('subtotal');
+    const $shipping    = document.getElementById('shipping');
+    const $discountRow = document.getElementById('discountRow');
+    const $discount    = document.getElementById('discount');
+    const $total       = document.getElementById('total');
+
+    const $couponInput = document.getElementById('couponInput');
+    const $applyBtn    = document.getElementById('applyCouponBtn');
+    const $couponHint  = document.getElementById('couponHint');
+
+    // ---- Render principal ----
+    function renderCart(){
+      $items.innerHTML = '';
+      let subtotal = 0;
+
+      cart.forEach((item, idx) => {
+        const line = Number(item.price) * Number(item.quantity);
+        subtotal += line;
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${item.name}</td>
+          <td>Q${money(item.price)}</td>
+          <td>
+            <div class="d-flex justify-content-center align-items-center">
+              <button class="qty-btn" data-idx="${idx}" data-delta="-1">-</button>
+              <input value="${item.quantity}" class="form-control text-center mx-2" style="width: 50px;" readonly>
+              <button class="qty-btn" data-idx="${idx}" data-delta="1">+</button>
+            </div>
+          </td>
+          <td>Q${money(line)}</td>
+          <td><button class="remove-btn" data-remove="${idx}">X</button></td>
+        `;
+        $items.appendChild(tr);
+      });
+
+      // Recalcular descuento si había cupón guardado (depende del subtotal)
+      if (savedCoupon) {
+        discount = calcDiscountFromCoupon(savedCoupon, subtotal);
+      } else {
+        discount = 0;
+      }
+
+      const discounted = Math.max(0, subtotal - discount);
+      const total = discounted + SHIPPING;
+
+      // Pintar
+      $subtotal.textContent = money(subtotal);
+      $shipping.textContent = money(SHIPPING);
+      if (discount > 0) {
+        $discountRow.style.display = '';
+        $discount.textContent = money(discount);
+      } else {
+        $discountRow.style.display = 'none';
+      }
+      $total.textContent = money(total);
+
+      // Guardar para checkout
+      save(SUMMARY_KEY, {
+        subtotal,
+        shipping: SHIPPING,
+        discount,
+        total
+      });
+
+      // Guardar carrito (por si vino de cambios)
+      save(CART_KEY, cart);
+    }
+
+    // Calcular descuento a partir del objeto cupón y el subtotal actual
+    function calcDiscountFromCoupon(coupon, subtotal){
+      if (!coupon) return 0;
+      let d = 0;
+      if (coupon.tipo === 'porcentaje') {
+        d = subtotal * (Number(coupon.valor) / 100);
+      } else if (coupon.tipo === 'fijo') {
+        d = Number(coupon.valor);
+      }
+      if (d > subtotal) d = subtotal;
+      return d;
+    }
+
+    // Delegación de eventos para +/- y eliminar
+    $items.addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+
+      if (btn.dataset.idx !== undefined && btn.dataset.delta) {
+        const idx = Number(btn.dataset.idx);
+        const delta = Number(btn.dataset.delta);
+        if (!cart[idx]) return;
+        const next = (cart[idx].quantity || 0) + delta;
+        if (next <= 0) return;
+        cart[idx].quantity = next;
+        renderCart();
+      }
+
+      if (btn.dataset.remove !== undefined) {
+        const idx = Number(btn.dataset.remove);
+        cart.splice(idx, 1);
+        // Si no hay productos, borro cupón/desc
+        if (!cart.length) {
+          savedCoupon = null;
+          discount = 0;
+          localStorage.removeItem(COUPON_KEY);
+        }
+        renderCart();
+      }
+    });
+
+    // Aplicar cupón
+    $applyBtn.addEventListener('click', async () => {
+      const code = ($couponInput.value || '').trim();
+      if (!code) return alert('Ingresa un código');
+
+      const subtotal = cart.reduce((s, i) => s + (Number(i.price) * Number(i.quantity || 0)), 0);
+      if (subtotal <= 0) return alert('Tu carrito está vacío');
+
+      try {
+        const res = await validateCoupon(code, subtotal); // {valid, tipo, valor, ...}
+        if (!res.valid) {
+          savedCoupon = null;
+          localStorage.removeItem(COUPON_KEY);
+          discount = 0;
+          renderCart();
+          return alert(res.message || 'Cupón inválido o no aplicable');
+        }
+
+        // Guardar cupón “normalizado” para usarlo en checkout
+        savedCoupon = { codigo: res.codigo || code, tipo: res.tipo, valor: Number(res.valor) };
+        save(COUPON_KEY, savedCoupon);
+
+        // Recalcular y pintar
+        renderCart();
+        $couponHint.style.display = '';
+        $couponHint.textContent = 'Cupón aplicado. Se reflejará también en el checkout.';
+        alert('Cupón aplicado ✅');
+      } catch (err) {
+        alert(err.message || 'No se pudo validar el cupón');
+      }
+    });
+
+    // Helpers de storage
+    function safeRead(key, fallback){
+      try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }
+      catch { return fallback; }
+    }
+    function save(key, val){
+      localStorage.setItem(key, JSON.stringify(val));
+    }
+
+    // Primera carga
+    renderCart();
+
+    // Sincroniza si cambia el storage desde otra pestaña
+    window.addEventListener('storage', (e) => {
+      if (e.key === CART_KEY || e.key === COUPON_KEY) {
+        cart = safeRead(CART_KEY, []);
+        savedCoupon = safeRead(COUPON_KEY, null);
+        renderCart();
+      }
+    });
+  </script>
+</body>
+</html>

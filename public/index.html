@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Joyería Mares</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- Estilos y librerías -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
+    <link href="css/style.css" rel="stylesheet">
+    <!-- Bootstrap CSS -->
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-RF1KBJX18Q"></script>
+    <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+
+    gtag('config', 'G-RF1KBJX18Q');
+    </script>
+</head>
+
+
+
+<body>
+    <!-- Navegación -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <a class="navbar-brand" href="#">Joyería Mares</a>
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav ml-auto">
+                <li class="nav-item"><a class="nav-link" href="index.html">Inicio</a></li>
+                <li class="nav-item"><a class="nav-link" href="shop.html">Tienda</a></li>
+                <li class="nav-item"><a class="nav-link" href="contact.html">Contacto</a></li>
+                <li class="nav-item">
+                    <a href="cart.html" class="nav-link">
+                        <i class="fas fa-shopping-cart"></i>
+                        <span class="cart-count badge badge-light text-dark rounded-circle px-2">0</span>
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Encabezado -->
+    <header class="text-center py-4 bg-light">
+        <h1 class="text-uppercase">Joyería Brillante</h1>
+        <p>Descubre nuestras joyas exclusivas</p>
+    </header>
+
+    <!-- Filtros -->
+    <div class="container my-4">
+        <div class="btn-group d-flex justify-content-center" id="categoryFilters">
+            <button class="btn btn-outline-dark active" data-filter="all">Todos</button>
+            <button class="btn btn-outline-dark" data-filter="anillos">Anillos</button>
+            <button class="btn btn-outline-dark" data-filter="collares">Collares</button>
+            <button class="btn btn-outline-dark" data-filter="aretes">Aretes</button>
+        </div>
+    </div>
+
+    <!-- Productos -->
+   <!-- dentro de <main class="container py-4"> -->
+    <div id="productsGrid" class="row"></div>
+
+    <!-- al final del body, importa primero api.js y luego main.js -->
+    <script type="module" src="js/api.js"></script>
+    <script type="module" src="js/main.js"></script>
+
+
+   
+ 
+    <!-- Footer -->
+    <footer class="bg-dark text-white text-center py-3">
+        <p>&copy; 2025 Joyería Mares. Todos los derechos reservados.</p>
+    </footer>
+    <!-- WhatsApp Floating Button -->
+    <a href="https://wa.me/50240888859?text=Hola%20visite%20tu%20sitio%20web%20y%20me%20interesan%20tus%20productos.%20%C2%BFNecesito%20mas%20informaci%C3%B3n%3F" class="whatsapp-btn" target="_blank" aria-label="Chatea con Joyeria de Mares" title="Joyeria de Mares">
+        <i class="fab fa-whatsapp"></i>
+    </a>
+
+    <!-- Bootstrap JS -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Scripts -->
+    <script src="Js/main.js"></script>
+</body>
+</html>

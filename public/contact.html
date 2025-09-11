@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Contacto - Joyería Mares</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Bootstrap + Estilos -->
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <link href="css/style.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container py-5">
+        <a href="index.html" class="btn btn-outline-secondary">
+            &larr; Volver al inicio
+        </a>
+        <h2 class="text-center mb-4">Contáctanos</h2>
+
+        <div class="row">
+            <div class="col-md-6">
+                <form id="contact-form" action="https://formsubmit.co/fjorgemario4@gmail.com" method="POST">
+                    <div class="form-group">
+                        <label>Nombre completo</label>
+                        <input type="text" class="form-control" name="name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Correo electrónico</label>
+                        <input type="email" class="form-control" name="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Mensaje</label>
+                        <textarea class="form-control" rows="5" name="message" required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Enviar mensaje</button>
+                </form>
+            </div>
+            <div class="col-md-6">
+                <h5 class="mb-3">Información de contacto</h5>
+                <p><i class="fas fa-map-marker-alt"></i> 1ra Avenida, Ciudad de Guatemala</p>
+                <p><i class="fas fa-phone-alt"></i> +50240888859</p>
+                <p><i class="fas fa-envelope"></i> fjorgemario4@gmail.com</p>
+                <p>También puedes encontrarnos en nuestras redes sociales.</p>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-12">
+                <iframe src="https://maps.google.com/maps?q=14.6318104,-90.6090869&z=15&output=embed" width="100%" height="400" frameborder="0" style="border:0;" allowfullscreen="" aria-hidden="false" tabindex="0"></iframe>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
