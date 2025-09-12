@@ -1,20 +1,33 @@
 // db.js
+import 'dotenv/config';
 import mysql from 'mysql2/promise';
-import dotenv from 'dotenv';
-dotenv.config();
+
+const {
+  DB_HOST,
+  DB_PORT = 3306,
+  DB_USER,
+  DB_PASS,
+  DB_NAME,
+} = process.env;
 
 export const pool = mysql.createPool({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME,
+  host: DB_HOST,
+  port: Number(DB_PORT || 3306),
+  user: DB_USER,
+  password: DB_PASS,
+  database: DB_NAME,
   waitForConnections: true,
-  connectionLimit: Number(process.env.DB_CONNECTION_LIMIT || 10),
-  namedPlaceholders: true,
-  timezone: 'Z'
+  connectionLimit: 10,
+  // Hostinger suele requerir SSL o al menos no bloquearlo
+  ssl: { rejectUnauthorized: false },
 });
 
-// Test rápido
-pool.getConnection()
-  .then((c) => { console.log('✅ MySQL_conectado'); c.release(); })
-  .catch((e) => console.error('❌ Error MySQL:', e.message));
+// Prueba rápida de conexión al arrancar
+try {
+  await pool.query('SELECT 1');
+  console.log('✅ MySQL conectado correctamente');
+} catch (err) {
+  console.error('❌ Error conectando a MySQL:', err.message);
+}
+
+export default pool;
