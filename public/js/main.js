@@ -98,27 +98,39 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 });
 
+
 /* Render dinámico de cards */
 function renderProducts(list) {
   const grid = $('#productsGrid');
   if (!grid) return;
+
   grid.innerHTML = list.map(p => {
+    const stock = Number(p.Stock ?? 0);
+    const agotado = stock <= 0;
+
+    const stockBadge = agotado
+      ? `<span class="badge badge-danger">Agotado</span>`
+      : `<span class="badge badge-secondary">Disponibles: ${stock}</span>`;
+
     return `
       <div class="col-md-4 mb-4 product"
            data-category="${p.Categoria}"
            data-material="${p.Material || ''}"
            data-price="${Number(p.Precio)}"
-           data-id="${p.Id}">
+           data-id="${p.Id}"
+           data-stock="${stock}">
         <div class="card h-100">
           <img src="${p.ImagenUrl}" class="card-img-top" alt="${p.Nombre}">
           <div class="card-body text-center d-flex flex-column">
             <h5 class="card-title product-title">${p.Nombre}</h5>
+            <div class="mb-2">${stockBadge}</div>
             <p class="card-text mb-2">${moneyFmt.format(p.Precio)}</p>
             <button class="btn btn-outline-dark mt-auto add-to-cart"
                     data-id="${p.Id}"
                     data-name="${p.Nombre}"
-                    data-price="${p.Precio}">
-              <i class="fa fa-shopping-cart"></i> Agregar
+                    data-price="${p.Precio}"
+                    ${agotado ? 'disabled' : ''}>
+              <i class="fa fa-shopping-cart"></i> ${agotado ? 'No disponible' : 'Agregar'}
             </button>
           </div>
         </div>
@@ -126,6 +138,7 @@ function renderProducts(list) {
     `;
   }).join('');
 }
+
 
 /* ================================
    Carrito

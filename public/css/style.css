@@ -119,4 +119,12 @@ footer {
             color: #000;
         }
 
-        
+/* Badge de disponibilidad */
+.badge-secondary {
+  background-color: #e9ecef;
+  color: #333;
+}
+
+.badge-danger {
+  background-color: #dc3545;
+}
