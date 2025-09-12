@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Carrito - Joyería Brillante</title>
+  <title>Carrito - Joyería Mares</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <!-- Bootstrap + Estilos -->
@@ -62,6 +62,7 @@
     const CART_KEY     = 'cart';
     const SUMMARY_KEY  = 'checkout_summary';
     const COUPON_KEY   = 'coupon';
+    const SNAPSHOT_KEY = 'checkout_cart_snapshot'; // NUEVO: “foto” del carrito para el checkout
 
     // --- Envío fijo ---
     const SHIPPING = 10;
@@ -70,8 +71,8 @@
     const money = n => Number(n || 0).toFixed(2);
 
     // --- Estado ---
-    let cart      = safeRead(CART_KEY, []);
-    let discount  = 0;              // Q
+    let cart        = safeRead(CART_KEY, []);
+    let discount    = 0;                      // Q
     let savedCoupon = safeRead(COUPON_KEY, null); // {codigo, tipo, valor}
 
     // --- DOM ---
@@ -85,6 +86,7 @@
     const $couponInput = document.getElementById('couponInput');
     const $applyBtn    = document.getElementById('applyCouponBtn');
     const $couponHint  = document.getElementById('couponHint');
+    const $goCheckout  = document.getElementById('goCheckout');
 
     // ---- Render principal ----
     function renderCart(){
@@ -145,17 +147,12 @@
       save(CART_KEY, cart);
     }
 
-    // Calcular descuento a partir del objeto cupón y el subtotal actual
     function calcDiscountFromCoupon(coupon, subtotal){
       if (!coupon) return 0;
       let d = 0;
-      if (coupon.tipo === 'porcentaje') {
-        d = subtotal * (Number(coupon.valor) / 100);
-      } else if (coupon.tipo === 'fijo') {
-        d = Number(coupon.valor);
-      }
-      if (d > subtotal) d = subtotal;
-      return d;
+      if (coupon.tipo === 'porcentaje') d = subtotal * (Number(coupon.valor) / 100);
+      else if (coupon.tipo === 'fijo')   d = Number(coupon.valor);
+      return Math.min(d, subtotal);
     }
 
     // Delegación de eventos para +/- y eliminar
@@ -176,7 +173,6 @@
       if (btn.dataset.remove !== undefined) {
         const idx = Number(btn.dataset.remove);
         cart.splice(idx, 1);
-        // Si no hay productos, borro cupón/desc
         if (!cart.length) {
           savedCoupon = null;
           discount = 0;
@@ -204,11 +200,9 @@
           return alert(res.message || 'Cupón inválido o no aplicable');
         }
 
-        // Guardar cupón “normalizado” para usarlo en checkout
         savedCoupon = { codigo: res.codigo || code, tipo: res.tipo, valor: Number(res.valor) };
         save(COUPON_KEY, savedCoupon);
 
-        // Recalcular y pintar
         renderCart();
         $couponHint.style.display = '';
         $couponHint.textContent = 'Cupón aplicado. Se reflejará también en el checkout.';
@@ -216,6 +210,12 @@
       } catch (err) {
         alert(err.message || 'No se pudo validar el cupón');
       }
+    });
+
+    // >>> NUEVO: antes de ir al checkout guardo un “snapshot” del carrito <<<
+    $goCheckout.addEventListener('click', () => {
+      save(SNAPSHOT_KEY, cart);  // foto del carrito para que el checkout NO se quede sin ítems
+      // el summary ya se guarda en renderCart(); también dejamos el cupón en COUPON_KEY
     });
 
     // Helpers de storage

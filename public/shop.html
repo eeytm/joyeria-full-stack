@@ -1,49 +1,271 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Tienda - Joyería Mares</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
-    <!-- Bootstrap + Estilos -->
-    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
-    <link href="css/style.css" rel="stylesheet">
+  <meta charset="UTF-8" />
+  <title>Tienda - Joyería Mares</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Bootstrap + estilos propios -->
+  <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="css/style.css" rel="stylesheet" />
+
+  <style>
+    /* retoques suaves para la tienda */
+    .product-card { border: 1px solid #eee; border-radius: 10px; overflow: hidden; background:#fff; }
+    .product-card img { width:100%; height:240px; object-fit:cover; }
+    .product-card .card-body { padding: 14px; }
+    .filters .form-control, .filters .custom-select { min-width: 180px; }
+    .badge-stock { font-size: 12px; }
+    .empty-state { padding: 40px 0; color:#777; }
+  </style>
 </head>
-<body>
-    <div class="container py-5">
-        <a href="index.html" class="btn btn-outline-secondary">
-            &larr; Volver al inicio
+<body class="bg-light">
+
+  <div class="container py-4">
+    <div class="d-flex align-items-center mb-3">
+      <a href="index.html" class="btn btn-outline-secondary mr-2">&larr; Volver al inicio</a>
+      <h2 class="mb-0">Tienda</h2>
+      <div class="ml-auto">
+        <a href="cart.html" class="btn btn-outline-dark">
+          <span class="mr-1">Carrito</span>
+          <span id="cartCount" class="badge badge-light text-dark">0</span>
         </a>
-        <h2 class="text-center mb-4">Nuestra Colección</h2>
-        <div class="row">
-            <div class="col-md-4 mb-4">
-                <div class="card">
-                    <img src="img/anillo1.jpg" class="card-img-top" alt="Anillo">
-                    <div class="card-body text-center">
-                        <h5 class="card-title">Anillo Plata</h5>
-                        <p class="card-text">Q820.00</p>
-                        <button class="btn btn-outline-dark add-to-cart" data-id="4" data-name="Anillo Plata" data-price="820.00">
-                            <i class="fa fa-shopping-cart"></i> Agregar
-                        </button>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4 mb-4">
-                <div class="card">
-                    <img src="img/collar1.jpg" class="card-img-top" alt="Collar">
-                    <div class="card-body text-center">
-                        <h5 class="card-title">Collar Perlas</h5>
-                        <p class="card-text">Q980.00</p>
-                        <button class="btn btn-outline-dark add-to-cart" data-id="5" data-name="Collar Perlas" data-price="980.00">
-                            <i class="fa fa-shopping-cart"></i> Agregar
-                        </button>
-                    </div>
-                </div>
-            </div>
-            <!-- Agrega más productos aquí -->
-        </div>
+      </div>
     </div>
 
-    <script src="js/main.js"></script>
+    <!-- Filtros -->
+    <div class="filters bg-white shadow-sm rounded p-3 mb-3">
+      <div class="form-row align-items-center">
+        <div class="col-sm-6 col-lg-4 mb-2">
+          <input id="q" class="form-control" placeholder="Buscar por nombre, categoría o material" />
+        </div>
+        <div class="col-sm-6 col-lg-3 mb-2">
+          <select id="cat" class="custom-select">
+            <option value="">Todas las categorías</option>
+            <option value="anillos">Anillos</option>
+            <option value="collares">Collares</option>
+            <option value="aretes">Aretes</option>
+          </select>
+        </div>
+        <div class="col-sm-6 col-lg-3 mb-2">
+          <select id="sort" class="custom-select">
+            <option value="name-asc">Nombre A–Z</option>
+            <option value="name-desc">Nombre Z–A</option>
+            <option value="price-asc">Precio menor a mayor</option>
+            <option value="price-desc">Precio mayor a menor</option>
+          </select>
+        </div>
+        <div class="col-sm-6 col-lg-2 mb-2 text-right">
+          <div class="custom-control custom-switch">
+            <input type="checkbox" class="custom-control-input" id="onlyStock">
+            <label class="custom-control-label" for="onlyStock">Solo disponibles</label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Grid -->
+    <div id="grid" class="row"></div>
+
+    <div id="empty" class="text-center empty-state d-none">
+      <p class="mb-0">No encontramos productos con esos filtros.</p>
+    </div>
+  </div>
+
+  <script type="module">
+    // ===== helpers =====
+    const $ = (sel, ctx=document) => ctx.querySelector(sel);
+    const $$ = (sel, ctx=document) => Array.from(ctx.querySelectorAll(sel));
+    const money = (n) => `Q ${Number(n||0).toFixed(2)}`;
+
+    // Carrito (localStorage)
+    const CART_KEY = 'cart';
+    const readCart = () => {
+      try { return JSON.parse(localStorage.getItem(CART_KEY) || '[]'); }
+      catch { return []; }
+    };
+    const writeCart = (arr) => localStorage.setItem(CART_KEY, JSON.stringify(arr));
+    const updateCartBadge = () => {
+      const count = readCart().reduce((a,b)=>a + Number(b.quantity||0), 0);
+      $('#cartCount').textContent = count;
+    };
+
+    function addToCart(item) {
+      const cart = readCart();
+      const idx = cart.findIndex(x => String(x.id) === String(item.id));
+      if (idx >= 0) {
+        cart[idx].quantity = Number(cart[idx].quantity || 0) + 1;
+      } else {
+        cart.push({ id:item.id, name:item.name, price:Number(item.price), quantity:1, image:item.image || '' });
+      }
+      writeCart(cart);
+      updateCartBadge();
+    }
+
+    // ===== estado de filtros con URL =====
+    const params = new URLSearchParams(location.search);
+    const state = {
+      q: params.get('q') || '',
+      cat: params.get('cat') || '',
+      sort: params.get('sort') || 'name-asc',
+      onlyStock: params.get('inStock') === 'true'
+    };
+
+    // pinta filtros iniciales
+    $('#q').value = state.q;
+    $('#cat').value = state.cat;
+    $('#sort').value = state.sort;
+    $('#onlyStock').checked = state.onlyStock;
+
+    // ===== data =====
+    let allProducts = [];   // de API
+    let viewProducts = [];  // tras filtros
+
+    async function fetchProducts() {
+      const qs = new URLSearchParams();
+      if (state.q) qs.set('q', state.q);
+      if (state.onlyStock) qs.set('inStock', 'true');
+
+      // Trae TODO y luego filtramos por categoría del lado del cliente
+      const res = await fetch(`/api/products?${qs.toString()}`);
+      if (!res.ok) throw new Error('No se pudo obtener productos');
+      allProducts = await res.json();
+    }
+
+    function applyFilters() {
+      // por categoría (si viene vacía, no filtra)
+      viewProducts = allProducts.filter(p => {
+        if (!state.cat) return true;
+        // normaliza
+        const c = String(p.Categoria || p.categoria || '').toLowerCase();
+        return c === state.cat.toLowerCase();
+      });
+
+      // ordenar
+      const s = state.sort;
+      viewProducts.sort((a,b) => {
+        if (s === 'name-asc')   return String(a.Nombre||a.name).localeCompare(String(b.Nombre||b.name));
+        if (s === 'name-desc')  return String(b.Nombre||b.name).localeCompare(String(a.Nombre||a.name));
+        if (s === 'price-asc')  return Number(a.Precio||a.price) - Number(b.Precio||b.price);
+        if (s === 'price-desc') return Number(b.Precio||b.price) - Number(a.Precio||a.price);
+        return 0;
+      });
+    }
+
+    function render() {
+      const $grid = $('#grid');
+      const $empty = $('#empty');
+      $grid.innerHTML = '';
+
+      if (!viewProducts.length) {
+        $empty.classList.remove('d-none');
+        return;
+      }
+      $empty.classList.add('d-none');
+
+      const frag = document.createDocumentFragment();
+      viewProducts.forEach(p => {
+        const id    = p.Id ?? p.id;
+        const name  = p.Nombre ?? p.name ?? '';
+        const price = p.Precio ?? p.price ?? 0;
+        const img   = p.ImagenUrl || p.image || 'img/anillo1.jpg';
+        const stock = Number(p.Stock ?? p.stock ?? 0);
+        const activo = Number(p.Activo ?? 1);
+
+        const col = document.createElement('div');
+        col.className = 'col-sm-6 col-md-4 col-lg-3 mb-4';
+
+        col.innerHTML = `
+          <div class="product-card h-100 d-flex flex-column">
+            <img src="${img}" alt="${name}">
+            <div class="card-body d-flex flex-column">
+              <h6 class="mb-1">${name}</h6>
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <strong>${money(price)}</strong>
+                <span class="badge badge-${stock>0 && activo ? 'secondary' : 'danger'} badge-stock">
+                  ${stock>0 && activo ? 'Disponibles: ' + stock : 'Agotado'}
+                </span>
+              </div>
+              <button class="btn btn-outline-dark mt-auto" ${stock>0 && activo ? '' : 'disabled'}>
+                <i class="fa fa-shopping-cart mr-1"></i> Agregar
+              </button>
+            </div>
+          </div>
+        `;
+
+        col.querySelector('button').addEventListener('click', () => {
+          addToCart({ id, name, price, image: img });
+        });
+
+        frag.appendChild(col);
+      });
+
+      $grid.appendChild(frag);
+    }
+
+    function updateURL() {
+      const u = new URL(location.href);
+      const sp = u.searchParams;
+      // reset
+      ['q','cat','sort','inStock'].forEach(k => sp.delete(k));
+      if (state.q) sp.set('q', state.q);
+      if (state.cat) sp.set('cat', state.cat);
+      if (state.sort) sp.set('sort', state.sort);
+      if (state.onlyStock) sp.set('inStock', 'true');
+      history.replaceState(null, '', u.toString());
+    }
+
+    // ===== eventos de filtros =====
+    // búsqueda con debounce
+    let t;
+    $('#q').addEventListener('input', () => {
+      clearTimeout(t);
+      t = setTimeout(async () => {
+        state.q = $('#q').value.trim();
+        updateURL();
+        await fetchProducts();
+        applyFilters();
+        render();
+      }, 250);
+    });
+
+    $('#cat').addEventListener('change', () => {
+      state.cat = $('#cat').value;
+      updateURL();
+      applyFilters();
+      render();
+    });
+
+    $('#sort').addEventListener('change', () => {
+      state.sort = $('#sort').value;
+      updateURL();
+      applyFilters();
+      render();
+    });
+
+    $('#onlyStock').addEventListener('change', async () => {
+      state.onlyStock = $('#onlyStock').checked;
+      updateURL();
+      await fetchProducts();
+      applyFilters();
+      render();
+    });
+
+    // ===== init =====
+    (async function init() {
+      updateCartBadge();
+      await fetchProducts();
+      applyFilters();
+      render();
+    })();
+
+    // actualiza badge si el carrito cambia en otra pestaña
+    window.addEventListener('storage', (e) => {
+      if (e.key === CART_KEY) updateCartBadge();
+    });
+  </script>
+
+  <!-- font-awesome para el ícono del carrito (opcional si ya lo cargas en layout) -->
+  <script defer src="https://use.fontawesome.com/releases/v5.15.4/js/all.js"></script>
 </body>
 </html>

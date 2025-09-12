@@ -21,18 +21,18 @@
         <div class="checkout-container shadow-sm p-4 bg-white">
           <h3 class="text-center mb-4">Finalizar Compra</h3>
 
-          <form id="checkout-form">
+          <form id="checkout-form" autocomplete="on">
             <div class="form-group">
               <label>Nombre completo</label>
-              <input type="text" class="form-control" required />
+              <input id="f_nombre" type="text" class="form-control" required />
             </div>
             <div class="form-group">
               <label>Correo electrónico</label>
-              <input type="email" class="form-control" required />
+              <input id="f_email" type="email" class="form-control" required />
             </div>
             <div class="form-group">
               <label>Dirección de entrega</label>
-              <input type="text" class="form-control" required />
+              <input id="f_dir" type="text" class="form-control" required />
             </div>
 
             <div class="form-group">
@@ -41,6 +41,7 @@
                 <option value="entrega">Pago contra entrega</option>
                 <option value="tarjeta">Tarjeta de crédito</option>
                 <option value="transferencia">Transferencia bancaria</option>
+                <option value="paypal">PayPal</option>
               </select>
             </div>
 
@@ -48,15 +49,15 @@
             <div id="card-fields" class="extra-fields" style="display:none">
               <div class="form-group mt-3">
                 <label>Número de tarjeta</label>
-                <input type="text" class="form-control" placeholder="1234 5678 9012 3456" />
+                <input id="f_card" type="text" class="form-control" placeholder="1234 5678 9012 3456" />
               </div>
               <div class="form-group">
                 <label>Fecha de expiración</label>
-                <input type="month" class="form-control" />
+                <input id="f_exp" type="month" class="form-control" />
               </div>
               <div class="form-group">
                 <label>CVV</label>
-                <input type="text" class="form-control" placeholder="123" />
+                <input id="f_cvv" type="text" class="form-control" placeholder="123" />
               </div>
             </div>
 
@@ -64,8 +65,13 @@
             <div id="transfer-fields" class="extra-fields" style="display:none">
               <div class="form-group mt-3">
                 <label>Documento/Referencia de pago</label>
-                <input type="text" class="form-control" placeholder="Número de recibo o comprobante" />
+                <input id="f_ref" type="text" class="form-control" placeholder="Número de recibo o comprobante" />
               </div>
+            </div>
+
+            <!-- PayPal (solo info) -->
+            <div id="paypal-hint" class="alert alert-info mt-3" style="display:none">
+              Al confirmar el pedido te llevaremos a PayPal para completar el pago.
             </div>
 
             <button type="submit" class="btn btn-confirm btn-dark mt-3 w-100">Confirmar pedido</button>
@@ -111,33 +117,28 @@
 
     // ======= Config =======
     const SHIPPING = 10;
+    const PAYPAL_USER = 'eeytm'; // tu usuario de PayPal.me
+    const PAYPAL_BASE = `https://paypal.me/${PAYPAL_USER}`;
+
+    // ======= Storage Keys =======
+    const CART_KEY        = 'cart';
+    const SNAPSHOT_KEY    = 'checkout_cart_snapshot'; // “foto” creada en cart.html
+    const SUMMARY_KEY     = 'checkout_summary';
+    const COUPON_KEY      = 'coupon';
+    const FORM_KEY        = 'checkout_form_data';      // guarda los campos del formulario
+    const AWAIT_PAYPAL    = 'awaiting_paypal';         // flag simple
 
     // ======= Helpers =======
     const q = (sel, ctx=document) => ctx.querySelector(sel);
     const money = (n) => Number(n || 0).toFixed(2);
+    const save = (k,v)=>localStorage.setItem(k, JSON.stringify(v));
+    const read = (k, fb=null)=>{ try{ return JSON.parse(localStorage.getItem(k)) ?? fb }catch{ return fb } };
 
-    function readCart() {
-      try { return JSON.parse(localStorage.getItem('cart') || '[]'); }
-      catch { return []; }
-    }
-    const sum = (arr, sel) => arr.reduce((a,b)=>a+sel(b),0);
-    const calcSubtotal = (cart) => sum(cart, i => Number(i.price) * Number(i.quantity || 0));
-
-    function saveSummary(obj) {
-      localStorage.setItem('checkout_summary', JSON.stringify(obj));
-    }
-    function loadSummary() {
-      try { return JSON.parse(localStorage.getItem('checkout_summary') || 'null'); }
-      catch { return null; }
-    }
-
-    function saveCoupon(c) {
-      if (!c) localStorage.removeItem('coupon');
-      else localStorage.setItem('coupon', JSON.stringify(c));
-    }
-    function loadCoupon() {
-      try { return JSON.parse(localStorage.getItem('coupon') || 'null'); }
-      catch { return null; }
+    // Intenta leer del carrito normal; si está vacío, cae al snapshot para no perderlo
+    function readEffectiveCart(){
+      const cart = read(CART_KEY, []);
+      if (cart && cart.length) return cart;
+      return read(SNAPSHOT_KEY, []); // fallback
     }
 
     function paintSummary({subtotal, shipping, discount, total}) {
@@ -150,52 +151,39 @@
     async function validateCoupon(code, subtotal) {
       const url = `/api/coupons/validate?codigo=${encodeURIComponent(code)}&subtotal=${encodeURIComponent(subtotal)}`;
       const res = await fetch(url);
-      return res.json(); // {valid, codigo, tipo, valor, descuento, message}
+      return res.json();
     }
 
     async function recalcWithCoupon(couponObj, subtotal) {
       if (!couponObj?.codigo) return { discount: 0, coupon: null, msg: '' };
-
       const data = await validateCoupon(couponObj.codigo, subtotal);
-      if (!data.valid) {
-        return { discount: 0, coupon: null, msg: data.message || 'Cupón inválido' };
-      }
+      if (!data.valid) return { discount: 0, coupon: null, msg: data.message || 'Cupón inválido' };
       const discount = Number(data.descuento || 0);
-      const coupon = {
-        codigo: data.codigo,
-        tipo: data.tipo,
-        valor: Number(data.valor),
-        descuento: discount
-      };
+      const coupon = { codigo: data.codigo, tipo: data.tipo, valor: Number(data.valor), descuento: discount };
       return { discount, coupon, msg: 'Cupón válido aplicado ✅' };
     }
 
+    // ======= Restaurar resumen + cupón =======
     async function initSummaryOnLoad() {
-      const cart = readCart();
-      const subtotal = calcSubtotal(cart);
+      const cart = readEffectiveCart();
+      const subtotal = cart.reduce((s,i)=> s + Number(i.price)*Number(i.quantity||0), 0);
 
-      let coupon = loadCoupon();
+      let coupon = read(COUPON_KEY, null);
       let discount = Number(coupon?.descuento || 0);
       let msg = '';
 
-      // Si hay cupón pero sin "descuento", lo recalculamos para mantener coherencia con el carrito
       if (coupon?.codigo && !coupon.descuento) {
         try {
           const res = await recalcWithCoupon(coupon, subtotal);
-          discount = res.discount;
-          coupon = res.coupon;
-          msg = res.msg;
-          saveCoupon(coupon);
-        } catch (_) {
-          discount = 0;
-          coupon = null;
-        }
+          discount = res.discount; coupon = res.coupon; msg = res.msg;
+          save(COUPON_KEY, coupon);
+        } catch { discount = 0; coupon = null; }
       }
 
       const total = Math.max(0, subtotal + SHIPPING - discount);
       const summary = { subtotal, shipping: SHIPPING, discount, total };
       paintSummary(summary);
-      saveSummary(summary);
+      save(SUMMARY_KEY, summary);
 
       if (coupon?.codigo) {
         q('#coupon-code').value = coupon.codigo;
@@ -205,74 +193,94 @@
       }
     }
 
-    async function applyCouponFlow() {
-      const cart = readCart();
-      if (!cart.length) { q('#coupon-msg').textContent = 'Tu carrito está vacío'; return; }
-      const subtotal = calcSubtotal(cart);
+    // ======= Cupón (en checkout) =======
+    q('#apply-coupon').addEventListener('click', async () => {
+      const cart = readEffectiveCart();
+      const subtotal = cart.reduce((s,i)=> s + Number(i.price)*Number(i.quantity||0), 0);
+      if (subtotal <= 0) { q('#coupon-msg').textContent = 'Tu carrito está vacío'; return; }
+
       const code = q('#coupon-code').value.trim();
       if (!code) { q('#coupon-msg').textContent = 'Ingresa un código de cupón.'; return; }
 
       try {
         const data = await validateCoupon(code, subtotal);
         if (!data.valid) {
-          saveCoupon(null);
+          save(COUPON_KEY, null);
           const summary = { subtotal, shipping: SHIPPING, discount: 0, total: subtotal + SHIPPING };
-          paintSummary(summary);
-          saveSummary(summary);
-          q('#coupon-msg').textContent = data.message || 'Cupón inválido';
-          return;
+          paintSummary(summary); save(SUMMARY_KEY, summary);
+          q('#coupon-msg').textContent = data.message || 'Cupón inválido'; return;
         }
-
         const discount = Number(data.descuento || 0);
         const total = Math.max(0, subtotal + SHIPPING - discount);
-        const coupon = {
-          codigo: data.codigo,
-          tipo: data.tipo,
-          valor: Number(data.valor),
-          descuento: discount
-        };
-        saveCoupon(coupon);
-
+        const coupon = { codigo: data.codigo, tipo: data.tipo, valor: Number(data.valor), descuento: discount };
+        save(COUPON_KEY, coupon);
         const summary = { subtotal, shipping: SHIPPING, discount, total };
-        paintSummary(summary);
-        saveSummary(summary);
+        paintSummary(summary); save(SUMMARY_KEY, summary);
         q('#coupon-msg').textContent = 'Cupón válido aplicado ✅';
-      } catch (err) {
+      } catch {
         q('#coupon-msg').textContent = 'Error validando el cupón';
       }
-    }
+    });
 
-    // ======= Eventos UI =======
+    // ======= Autosave del formulario =======
     const form = document.getElementById('checkout-form');
     const paymentMethod = document.getElementById('payment-method');
     const cardFields = document.getElementById('card-fields');
     const transferFields = document.getElementById('transfer-fields');
+    const paypalHint = document.getElementById('paypal-hint');
 
-    paymentMethod.addEventListener('change', () => {
-      const v = paymentMethod.value;
-      cardFields.style.display = (v === 'tarjeta') ? 'block' : 'none';
-      transferFields.style.display = (v === 'transferencia') ? 'block' : 'none';
-    });
+    function showByMethod(m){
+      cardFields.style.display = (m==='tarjeta') ? 'block' : 'none';
+      transferFields.style.display = (m==='transferencia') ? 'block' : 'none';
+      paypalHint.style.display = (m==='paypal') ? 'block' : 'none';
+    }
 
-    q('#apply-coupon').addEventListener('click', applyCouponFlow);
+    function restoreForm(){
+      const d = read(FORM_KEY, null);
+      if (!d) return;
+      q('#f_nombre').value = d.nombre || '';
+      q('#f_email').value  = d.email || '';
+      q('#f_dir').value    = d.dir || '';
+      paymentMethod.value  = d.metodo || 'entrega';
+      q('#f_card').value   = d.card || '';
+      q('#f_exp').value    = d.exp  || '';
+      q('#f_cvv').value    = d.cvv  || '';
+      q('#f_ref').value    = d.ref  || '';
+      showByMethod(paymentMethod.value);
+    }
+    function autosave(){
+      const data = {
+        nombre: q('#f_nombre').value.trim(),
+        email : q('#f_email').value.trim(),
+        dir   : q('#f_dir').value.trim(),
+        metodo: paymentMethod.value,
+        card  : q('#f_card').value.trim(),
+        exp   : q('#f_exp').value,
+        cvv   : q('#f_cvv').value.trim(),
+        ref   : q('#f_ref').value.trim()
+      };
+      save(FORM_KEY, data);
+    }
+    ['input','change','keyup'].forEach(ev => form.addEventListener(ev, autosave));
+    paymentMethod.addEventListener('change', ()=> showByMethod(paymentMethod.value));
 
     // ======= Submit Pedido =======
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
 
-      const cart = readCart();
-      if (!cart.length) { alert('Tu carrito está vacío'); return; }
+      // 1) recupero carrito desde snapshot si hace falta
+      const cart = readEffectiveCart();
+      if (!cart.length) { alert('Tu carrito está vacío'); return; } // snapshot también estaría vacío
 
-      const [nombre, email, direccion] = Array
-        .from(form.querySelectorAll('.form-control'))
-        .slice(0, 3).map(i => i.value.trim());
+      const nombre    = q('#f_nombre').value.trim();
+      const email     = q('#f_email').value.trim();
+      const direccion = q('#f_dir').value.trim();
 
       const metodoPago = paymentMethod.value;
       const referencia = (metodoPago === 'transferencia')
-        ? transferFields.querySelector('input')?.value.trim() || ''
-        : (metodoPago === 'tarjeta' ? 'Tarjeta' : 'Contra entrega');
+        ? (q('#f_ref').value.trim() || '')
+        : (metodoPago === 'tarjeta' ? 'Tarjeta' : (metodoPago === 'paypal' ? 'PayPal' : 'Contra entrega'));
 
-      // Detalles
       const detalles = cart.map(i => ({
         ProductoId: i.id,
         ProductoNombre: i.name,
@@ -281,9 +289,8 @@
         TotalLinea: Number(i.price) * Number(i.quantity)
       }));
 
-      // Totales desde summary guardado
-      const summary = loadSummary() || { subtotal: 0, shipping: SHIPPING, discount: 0, total: 0 };
-      const coupon = loadCoupon();
+      const summary = read(SUMMARY_KEY, { subtotal:0, shipping:SHIPPING, discount:0, total:0 });
+      const coupon  = read(COUPON_KEY, null);
 
       const payload = {
         Nombre: nombre,
@@ -299,12 +306,28 @@
         Detalles: detalles
       };
 
+      // PayPal: NO borres nada, redirige y deja todo persistido
+      if (metodoPago === 'paypal') {
+        save(AWAIT_PAYPAL, true); // simple flag
+        // me aseguro de que todo esté persistido:
+        autosave(); save(SUMMARY_KEY, summary); save(COUPON_KEY, coupon); save(SNAPSHOT_KEY, cart);
+        const amount = String((payload.Total || 0).toFixed(2)).replace(',', '.');
+        const paypalUrl = `${PAYPAL_BASE}/${amount}`;
+        window.location.href = paypalUrl;
+        return;
+      }
+
+      // Otros métodos: crea pedido y limpia
       try {
         const resp = await createOrder(payload);
         alert(`¡Gracias por tu compra! Nº pedido: ${resp.id}`);
-        localStorage.removeItem('cart');
-        localStorage.removeItem('coupon');
-        localStorage.removeItem('checkout_summary');
+        // Limpieza total
+        localStorage.removeItem(CART_KEY);
+        localStorage.removeItem(SNAPSHOT_KEY);
+        localStorage.removeItem(COUPON_KEY);
+        localStorage.removeItem(SUMMARY_KEY);
+        localStorage.removeItem(FORM_KEY);
+        localStorage.removeItem(AWAIT_PAYPAL);
         window.location.href = 'index.html';
       } catch (err) {
         alert(err?.message || 'Error al procesar el pedido');
@@ -312,7 +335,12 @@
     });
 
     // ======= Init =======
-    initSummaryOnLoad();
+    restoreForm();
+    await initSummaryOnLoad();
+    showByMethod(paymentMethod.value);
+
+    // Si el usuario volvió desde PayPal con “Atrás”, todo sigue guardado.
+    // Podrías opcionalmente detectar AWAIT_PAYPAL y mostrar un aviso.
   </script>
 </body>
 </html>

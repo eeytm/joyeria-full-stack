@@ -128,3 +128,24 @@ footer {
 .badge-danger {
   background-color: #dc3545;
 }
+
+
+/* Dropzone */
+.dropzone {
+  border: 2px dashed #ced4da;
+  border-radius: 12px;
+  padding: 18px;
+  text-align: center;
+  color: #6c757d;
+  background: #f8f9fa;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.dropzone:hover {
+  background: #f1f3f5;
+}
+.dropzone.dragover {
+  background: #e9ecef;
+  border-color: #212529;
+  color: #212529;
+}
