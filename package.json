@@ -1,11 +1,14 @@
 {
   "name": "joyeria-fullstack",
   "version": "1.0.0",
+  "private": true,
   "type": "module",
   "main": "app.js",
+  "engines": { "node": ">=18" },
   "scripts": {
     "dev": "nodemon app.js",
-    "start": "node app.js"
+    "start": "node app.js",
+    "build": "echo \"no build step\""
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",
@@ -20,9 +23,5 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.10"
-  },
-    "engines": {
-    "node": "18.x"
   }
-
 }
