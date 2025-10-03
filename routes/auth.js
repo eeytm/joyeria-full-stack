@@ -1,4 +1,3 @@
-// routes/auth.js
 import { Router } from 'express';
 import { body, validationResult } from 'express-validator';
 import bcrypt from 'bcryptjs';
@@ -7,10 +6,8 @@ import { pool } from '../db.js';
 
 const router = Router();
 
-/* =========================
-   Helpers JWT / Middlewares
-========================= */
 function signToken(user) {
+  // user: { Id, Rol, Nombre, Email }
   return jwt.sign(
     { id: user.Id, role: user.Rol, name: user.Nombre, email: user.Email },
     process.env.JWT_SECRET || 'secret',
@@ -18,7 +15,6 @@ function signToken(user) {
   );
 }
 
-// Verifica token en Authorization: Bearer <token>
 export function verifyToken(req, res, next) {
   try {
     const auth = req.headers.authorization || '';
@@ -26,14 +22,13 @@ export function verifyToken(req, res, next) {
     if (!token) return res.status(401).json({ error: 'Sin token' });
 
     const payload = jwt.verify(token, process.env.JWT_SECRET || 'secret');
-    req.user = payload; // { id, role, name, email }
+    req.user = payload;
     next();
-  } catch (e) {
+  } catch {
     return res.status(401).json({ error: 'Token inválido' });
   }
 }
 
-// Requiere rol admin
 export function requireAdmin(req, res, next) {
   if (req.user?.role !== 'admin') {
     return res.status(403).json({ error: 'Solo administradores' });
@@ -41,9 +36,6 @@ export function requireAdmin(req, res, next) {
   next();
 }
 
-/* =============
-   POST /register
-=============== */
 router.post(
   '/register',
   [
@@ -58,17 +50,21 @@ router.post(
 
     const { Nombre, Email, Password, Rol = 'cliente' } = req.body;
     try {
-      // ¿ya existe?
-      const [rows] = await pool.query('SELECT Id FROM usuario WHERE Email = ?', [Email]);
-      if (rows.length) return res.status(409).json({ error: 'Email ya registrado' });
+      const [[exists]] = await pool.query(
+        'SELECT usuario_id FROM usuario WHERE email = ?',
+        [Email]
+      );
+      if (exists) return res.status(409).json({ error: 'Email ya registrado' });
+
+      const [[rol]] = await pool.query('SELECT rol_id FROM rol WHERE nombre = ?', [Rol]);
+      if (!rol) return res.status(400).json({ error: `Rol inexistente: ${Rol}` });
 
       const hash = await bcrypt.hash(Password, 10);
       const [ins] = await pool.query(
-        'INSERT INTO usuario (Nombre, Email, PasswordHash, Rol) VALUES (?,?,?,?)',
-        [Nombre, Email, hash, Rol]
+        'INSERT INTO usuario (nombre, email, password_hash, rol_id, estado) VALUES (?,?,?,?,1)',
+        [Nombre, Email, hash, rol.rol_id]
       );
 
-      // opcional: auto-login al registrar
       const user = { Id: ins.insertId, Nombre, Email, Rol };
       const token = signToken(user);
 
@@ -84,9 +80,6 @@ router.post(
   }
 );
 
-/* ===========
-   POST /login
-=========== */
 router.post(
   '/login',
   [
@@ -100,7 +93,12 @@ router.post(
     const { Email, Password } = req.body;
     try {
       const [rows] = await pool.query(
-        'SELECT Id, Nombre, Email, PasswordHash, Rol FROM usuario WHERE Email = ?',
+        `SELECT u.usuario_id AS Id, u.nombre AS Nombre, u.email AS Email,
+                u.password_hash AS PasswordHash, r.nombre AS Rol
+         FROM usuario u
+         JOIN rol r ON r.rol_id = u.rol_id
+         WHERE u.email = ?
+         LIMIT 1`,
         [Email]
       );
       if (!rows.length) return res.status(401).json({ error: 'Credenciales inválidas' });
@@ -110,7 +108,6 @@ router.post(
       if (!ok) return res.status(401).json({ error: 'Credenciales inválidas' });
 
       const token = signToken(user);
-
       res.json({
         ok: true,
         token,
@@ -122,12 +119,6 @@ router.post(
   }
 );
 
-/* ========
-   GET /me
-========= */
-router.get('/me', verifyToken, (req, res) => {
-  // req.user = { id, role, name, email, iat, exp }
-  res.json({ ok: true, user: req.user });
-});
+router.get('/me', verifyToken, (req, res) => res.json({ ok: true, user: req.user }));
 
 export default router;

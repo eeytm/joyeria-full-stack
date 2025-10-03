@@ -1,13 +1,7 @@
-// routes/coupons.js
 import { Router } from 'express';
 import { pool } from '../db.js';
-
 const router = Router();
 
-/**
- * GET /api/coupons/validate?codigo=MARES10&subtotal=1200
- * (o ?code=MARES10)
- */
 router.get('/validate', async (req, res) => {
   try {
     const { codigo, code, subtotal } = req.query;
@@ -16,7 +10,6 @@ router.get('/validate', async (req, res) => {
 
     if (!cod) return res.status(400).json({ valid: false, message: 'Falta el código' });
 
-    // ❗️OJO: no pedimos Id porque tu tabla no lo tiene
     const [rows] = await pool.query(
       `SELECT Codigo, Tipo, Valor, MinSubtotal, ExpiraEn, Activo
        FROM cupon
@@ -58,7 +51,6 @@ router.get('/validate', async (req, res) => {
       message: 'Cupón válido'
     });
   } catch (err) {
-    console.error(err);
     res.status(500).json({ valid: false, message: err.sqlMessage || err.message });
   }
 });
