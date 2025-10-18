@@ -59,38 +59,20 @@ router.get('/', async (req, res) => {
     const { q = '', inStock, categoria_id } = req.query;
     const terms = `%${q.trim()}%`;
 
-    let sql = `
-      SELECT
-        p.producto_id,
-        p.nombre,
-        p.descripcion,
-        p.precio,
-        p.stock,
-        p.categoria_id,
-        c.nombre AS categoria_nombre,
-        (
-          SELECT ip.url
-          FROM imagenes_producto ip
-          WHERE ip.producto_id = p.producto_id
-          ORDER BY ip.imagen_id DESC
-          LIMIT 1
-        ) AS imagen_url
-      FROM producto p
-      LEFT JOIN categoria c ON c.categoria_id = p.categoria_id
-      WHERE 1=1
-        AND (? = '' OR p.nombre LIKE ? OR p.descripcion LIKE ?)
-    `;
-    const params = [q.trim(), terms, terms];
+  let sql = `
+  SELECT producto_id, nombre, descripcion, precio, stock, categoria_id
+  FROM producto
+  WHERE 1=1
+    AND (? = '' OR nombre LIKE ? OR descripcion LIKE ?)
+`;
+const params = [q.trim(), terms, terms];
 
-    if (categoria_id) {
-      sql += ' AND p.categoria_id = ?';
-      params.push(Number(categoria_id));
-    }
-    if (String(inStock).toLowerCase() === 'true') {
-      sql += ' AND p.stock > 0';
-    }
+if (String(inStock).toLowerCase() === 'true') {
+  sql += ' AND stock > 0';
+}
 
-    sql += ' ORDER BY p.nombre ASC';
+sql += ' ORDER BY nombre ASC';
+
     const [rows] = await pool.query(sql, params);
     res.json(rows);
   } catch (e) {
@@ -105,28 +87,12 @@ router.get('/:id', async (req, res) => {
   try {
     const id = Number(req.params.id);
     const [rows] = await pool.query(
-      `
-      SELECT
-        p.producto_id,
-        p.nombre,
-        p.descripcion,
-        p.precio,
-        p.stock,
-        p.categoria_id,
-        c.nombre AS categoria_nombre,
-        (
-          SELECT ip.url
-          FROM imagenes_producto ip
-          WHERE ip.producto_id = p.producto_id
-          ORDER BY ip.imagen_id DESC
-          LIMIT 1
-        ) AS imagen_url
-      FROM producto p
-      LEFT JOIN categoria c ON c.categoria_id = p.categoria_id
-      WHERE p.producto_id = ?
-      `,
-      [id]
-    );
+  `SELECT producto_id, nombre, descripcion, precio, stock, categoria_id
+   FROM producto
+   WHERE producto_id = ?`,
+  [id]
+);
+
     if (!rows.length) return res.status(404).json({ message: 'Producto no encontrado' });
     res.json(rows[0]);
   } catch (e) {
@@ -149,12 +115,14 @@ router.post('/', verifyToken, requireAdmin, async (req, res) => {
       categoria_id = null
     } = req.body || {};
 
-    const [rp] = await pool.query(
-      `INSERT INTO producto
-       (nombre, descripcion, precio, stock, categoria_id)
-       VALUES (?,?,?,?,?)`,
-      [nombre ?? null, descripcion, Number(precio ?? 0), Number(stock ?? 0), categoria_id ?? null]
-    );
+const { nombre, descripcion=null, precio=0, stock=0, categoria_id=null } = req.body || {};
+
+const [rp] = await pool.query(
+  `INSERT INTO producto (nombre, descripcion, precio, stock, categoria_id)
+   VALUES (?,?,?,?,?)`,
+  [nombre ?? null, descripcion, Number(precio ?? 0), Number(stock ?? 0), categoria_id ?? null]
+);
+
     res.json({ ok: true, id: rp.insertId });
   } catch (e) {
     res.status(400).json({ error: e.sqlMessage || e.message });
@@ -167,32 +135,20 @@ router.post('/', verifyToken, requireAdmin, async (req, res) => {
  */
 router.put('/:id', verifyToken, requireAdmin, async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    const {
-      nombre,
-      descripcion,
-      precio,
-      stock,
-      categoria_id
-    } = req.body || {};
+    const { nombre, descripcion, precio, stock, categoria_id } = req.body || {};
 
-    const [r] = await pool.query(
-      `UPDATE producto SET
-         nombre = ?,
-         descripcion = ?,
-         precio = ?,
-         stock = ?,
-         categoria_id = ?
-       WHERE producto_id = ?`,
-      [
-        nombre ?? null,
-        (descripcion === undefined ? null : descripcion),
-        Number(precio ?? 0),
-        Number(stock ?? 0),
-        categoria_id ?? null,
-        id
-      ]
-    );
+const [r] = await pool.query(
+  `UPDATE producto SET
+     nombre = ?,
+     descripcion = ?,
+     precio = ?,
+     stock = ?,
+     categoria_id = ?
+   WHERE producto_id = ?`,
+  [nombre ?? null, (descripcion === undefined ? null : descripcion),
+   Number(precio ?? 0), Number(stock ?? 0), categoria_id ?? null, id]
+);
+
     res.json({ ok: true, changed: r.affectedRows });
   } catch (e) {
     res.status(400).json({ error: e.sqlMessage || e.message });
@@ -207,6 +163,7 @@ router.delete('/:id', verifyToken, requireAdmin, async (req, res) => {
   try {
     const id = Number(req.params.id);
     const [r] = await pool.query(`DELETE FROM producto WHERE producto_id = ?`, [id]);
+
     res.json({ ok: true, deleted: r.affectedRows });
   } catch (e) {
     res.status(400).json({ error: e.sqlMessage || e.message });
@@ -229,10 +186,11 @@ router.post('/:id/image', verifyToken, requireAdmin, upload.single('file'), asyn
     const url = `/uploads/${req.file.filename}`;
 
     // Inserta como nueva imagen asociada al producto
-    await pool.query(
-      'INSERT INTO imagenes_producto (producto_id, url) VALUES (?, ?)',
-      [id, url]
-    );
+    // después de obtener url
+await pool.query(
+  'INSERT INTO imagenes_producto (producto_id, url) VALUES (?, ?)',
+  [id, url]
+);
 
     res.json({ ok: true, url });
   } catch (e) {
