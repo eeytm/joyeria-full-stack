@@ -51,11 +51,18 @@ router.post('/', async (req, res) => {
 
     // 1) Bloquea stock de los productos que vienen en el pedido
     const ids = [...new Set(lineas.map(l => l.ProductoId))];
+
+    // ⚠️ Ajuste a tu esquema real: producto_id / stock
     const [rowsProd] = await conn.query(
-      `SELECT Id, Stock FROM producto WHERE Id IN (?) FOR UPDATE`,
+      `SELECT producto_id, stock
+         FROM producto
+        WHERE producto_id IN (?) FOR UPDATE`,
       [ids]
     );
-    const stockMap = new Map(rowsProd.map(r => [Number(r.Id), Number(r.Stock ?? 0)]));
+
+    const stockMap = new Map(
+      rowsProd.map(r => [Number(r.producto_id), Number(r.stock ?? 0)])
+    );
 
     // Productos inexistentes
     const faltan = ids.filter(id => !stockMap.has(id));
@@ -77,7 +84,7 @@ router.post('/', async (req, res) => {
       return res.status(409).json({ error: 'Stock insuficiente', items: insuf });
     }
 
-    // 2) Inserta encabezado de pedido
+    // 2) Inserta encabezado de pedido (dejamos tus columnas tal cual)
     const [rp] = await conn.query(
       `INSERT INTO pedido
         (Nombre, Email, Direccion, MetodoPago, Referencia,
@@ -113,12 +120,11 @@ router.post('/', async (req, res) => {
     for (const l of lineas) {
       const [upd] = await conn.query(
         `UPDATE producto
-           SET Stock = Stock - ?
-         WHERE Id = ?`,
+            SET stock = stock - ?
+          WHERE producto_id = ?`,
         [l.Cantidad, l.ProductoId]
       );
       if (upd.affectedRows !== 1) {
-        // algo raro: no afectó fila
         throw new Error(`No se pudo actualizar el stock del producto ${l.ProductoId}`);
       }
     }
