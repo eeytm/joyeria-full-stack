@@ -49,28 +49,48 @@ const upload = multer({
 
 /**
  * GET /api/products
- * Lista productos activos (y opcionalmente con stock > 0)
- * ?q=texto  (búsqueda por nombre/categoría/material)
+ * Lista productos (opcionalmente con stock > 0)
+ * ?q=texto  (búsqueda por nombre/descripcion)
  * ?inStock=true
+ * ?categoria_id=2
  */
 router.get('/', async (req, res) => {
   try {
-    const { q = '', inStock } = req.query;
+    const { q = '', inStock, categoria_id } = req.query;
     const terms = `%${q.trim()}%`;
 
     let sql = `
-      SELECT Id, Codigo, Nombre, Precio, Categoria, ImagenUrl, Material, Stock, Activo
-      FROM producto
-      WHERE Activo = 1
-        AND (Nombre LIKE ? OR Categoria LIKE ? OR Material LIKE ?)
+      SELECT
+        p.producto_id,
+        p.nombre,
+        p.descripcion,
+        p.precio,
+        p.stock,
+        p.categoria_id,
+        c.nombre AS categoria_nombre,
+        (
+          SELECT ip.url
+          FROM imagenes_producto ip
+          WHERE ip.producto_id = p.producto_id
+          ORDER BY ip.imagen_id DESC
+          LIMIT 1
+        ) AS imagen_url
+      FROM producto p
+      LEFT JOIN categoria c ON c.categoria_id = p.categoria_id
+      WHERE 1=1
+        AND (? = '' OR p.nombre LIKE ? OR p.descripcion LIKE ?)
     `;
-    const params = [terms, terms, terms];
+    const params = [q.trim(), terms, terms];
 
+    if (categoria_id) {
+      sql += ' AND p.categoria_id = ?';
+      params.push(Number(categoria_id));
+    }
     if (String(inStock).toLowerCase() === 'true') {
-      sql += ' AND Stock > 0';
+      sql += ' AND p.stock > 0';
     }
 
-    sql += ' ORDER BY Nombre ASC';
+    sql += ' ORDER BY p.nombre ASC';
     const [rows] = await pool.query(sql, params);
     res.json(rows);
   } catch (e) {
@@ -85,8 +105,26 @@ router.get('/:id', async (req, res) => {
   try {
     const id = Number(req.params.id);
     const [rows] = await pool.query(
-      `SELECT Id, Codigo, Nombre, Precio, Categoria, ImagenUrl, Material, Stock, Activo
-       FROM producto WHERE Id = ?`,
+      `
+      SELECT
+        p.producto_id,
+        p.nombre,
+        p.descripcion,
+        p.precio,
+        p.stock,
+        p.categoria_id,
+        c.nombre AS categoria_nombre,
+        (
+          SELECT ip.url
+          FROM imagenes_producto ip
+          WHERE ip.producto_id = p.producto_id
+          ORDER BY ip.imagen_id DESC
+          LIMIT 1
+        ) AS imagen_url
+      FROM producto p
+      LEFT JOIN categoria c ON c.categoria_id = p.categoria_id
+      WHERE p.producto_id = ?
+      `,
       [id]
     );
     if (!rows.length) return res.status(404).json({ message: 'Producto no encontrado' });
@@ -99,20 +137,23 @@ router.get('/:id', async (req, res) => {
 /**
  * Crear producto (solo admin)
  * POST /api/products
+ * body: { nombre, descripcion, precio, stock, categoria_id }
  */
 router.post('/', verifyToken, requireAdmin, async (req, res) => {
   try {
     const {
-      Codigo, Nombre, Precio, Categoria,
-      ImagenUrl, Material, Stock = 0, Activo = 1
+      nombre,
+      descripcion = null,
+      precio = 0,
+      stock = 0,
+      categoria_id = null
     } = req.body || {};
 
     const [rp] = await pool.query(
       `INSERT INTO producto
-       (Codigo, Nombre, Precio, Categoria, ImagenUrl, Material, Stock, Activo)
-       VALUES (?,?,?,?,?,?,?,?)`,
-      [Codigo ?? null, Nombre ?? null, Number(Precio ?? 0), Categoria ?? null,
-       ImagenUrl ?? null, Material ?? null, Number(Stock ?? 0), Number(Activo ?? 1)]
+       (nombre, descripcion, precio, stock, categoria_id)
+       VALUES (?,?,?,?,?)`,
+      [nombre ?? null, descripcion, Number(precio ?? 0), Number(stock ?? 0), categoria_id ?? null]
     );
     res.json({ ok: true, id: rp.insertId });
   } catch (e) {
@@ -128,17 +169,29 @@ router.put('/:id', verifyToken, requireAdmin, async (req, res) => {
   try {
     const id = Number(req.params.id);
     const {
-      Codigo, Nombre, Precio, Categoria,
-      ImagenUrl, Material, Stock, Activo
+      nombre,
+      descripcion,
+      precio,
+      stock,
+      categoria_id
     } = req.body || {};
 
     const [r] = await pool.query(
       `UPDATE producto SET
-        Codigo = ?, Nombre = ?, Precio = ?, Categoria = ?,
-        ImagenUrl = ?, Material = ?, Stock = ?, Activo = ?
-       WHERE Id = ?`,
-      [Codigo ?? null, Nombre ?? null, Number(Precio ?? 0), Categoria ?? null,
-       ImagenUrl ?? null, Material ?? null, Number(Stock ?? 0), Number(Activo ?? 1), id]
+         nombre = ?,
+         descripcion = ?,
+         precio = ?,
+         stock = ?,
+         categoria_id = ?
+       WHERE producto_id = ?`,
+      [
+        nombre ?? null,
+        (descripcion === undefined ? null : descripcion),
+        Number(precio ?? 0),
+        Number(stock ?? 0),
+        categoria_id ?? null,
+        id
+      ]
     );
     res.json({ ok: true, changed: r.affectedRows });
   } catch (e) {
@@ -153,7 +206,7 @@ router.put('/:id', verifyToken, requireAdmin, async (req, res) => {
 router.delete('/:id', verifyToken, requireAdmin, async (req, res) => {
   try {
     const id = Number(req.params.id);
-    const [r] = await pool.query(`DELETE FROM producto WHERE Id = ?`, [id]);
+    const [r] = await pool.query(`DELETE FROM producto WHERE producto_id = ?`, [id]);
     res.json({ ok: true, deleted: r.affectedRows });
   } catch (e) {
     res.status(400).json({ error: e.sqlMessage || e.message });
@@ -161,10 +214,12 @@ router.delete('/:id', verifyToken, requireAdmin, async (req, res) => {
 });
 
 /**
- * Subir/actualizar imagen del producto (solo admin)
+ * Subir/registrar imagen del producto (solo admin)
  * POST /api/products/:id/image
  * body: form-data con campo "file"
  * retorno: { ok:true, url:"/uploads/archivo.jpg" }
+ *
+ * 👉 Se guarda en la tabla imagenes_producto (no existe columna de imagen en producto).
  */
 router.post('/:id/image', verifyToken, requireAdmin, upload.single('file'), async (req, res) => {
   try {
@@ -173,15 +228,12 @@ router.post('/:id/image', verifyToken, requireAdmin, upload.single('file'), asyn
 
     const url = `/uploads/${req.file.filename}`;
 
-    // opcional: borrar imagen anterior si se desea, primero consulta
-    // const [rows] = await pool.query('SELECT ImagenUrl FROM producto WHERE Id = ?', [id]);
-    // if (rows.length && rows[0].ImagenUrl) {
-    //   const prev = rows[0].ImagenUrl;
-    //   const prevPath = path.join(__dirname, '..', 'public', prev.replace(/^\/+/, ''));
-    //   fs.existsSync(prevPath) && fs.unlinkSync(prevPath);
-    // }
+    // Inserta como nueva imagen asociada al producto
+    await pool.query(
+      'INSERT INTO imagenes_producto (producto_id, url) VALUES (?, ?)',
+      [id, url]
+    );
 
-    await pool.query('UPDATE producto SET ImagenUrl = ? WHERE Id = ?', [url, id]);
     res.json({ ok: true, url });
   } catch (e) {
     res.status(400).json({ error: e.message || 'Error subiendo imagen' });
